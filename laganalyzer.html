@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cost-Revenue Lag Analyzer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+        
+        .upload-section {
+            padding: 40px;
+            text-align: center;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        
+        .file-input-label {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .file-input-label:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .file-name {
+            margin-top: 15px;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .results {
+            padding: 40px;
+            display: none;
+        }
+        
+        .results.show {
+            display: block;
+        }
+        
+        .chart-container {
+            margin-bottom: 50px;
+            background: #f9f9f9;
+            padding: 30px;
+            border-radius: 8px;
+        }
+        
+        .chart-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        canvas {
+            max-height: 400px;
+        }
+        
+        .table-container {
+            margin-bottom: 40px;
+            overflow-x: auto;
+        }
+        
+        .section-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+        }
+        
+        tr:hover {
+            background: #f9f9f9;
+        }
+        
+        .stat-value {
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .error {
+            color: #e74c3c;
+            background: #fadbd8;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Cost-Revenue Lag Analyzer</h1>
+            <p>Analyze the relationship between marketing costs and revenue with lag effects</p>
+        </div>
+        
+        <div class="upload-section">
+            <div class="file-input-wrapper">
+                <input type="file" id="csvFile" accept=".csv">
+                <label for="csvFile" class="file-input-label">Choose CSV File</label>
+            </div>
+            <div class="file-name" id="fileName">No file chosen</div>
+            <div class="error" id="error" style="display: none;"></div>
+        </div>
+        
+        <div class="results" id="results">
+            <div class="chart-container">
+                <div class="chart-title">Correlation Between Cost and Revenue by Lag</div>
+                <canvas id="lagChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-title" id="timeSeriesTitle">Cost vs Revenue Over Time</div>
+                <canvas id="timeSeriesChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-title">Average Cost and Revenue by Day of Week</div>
+                <canvas id="dowChart"></canvas>
+            </div>
+            
+            <div class="table-container">
+                <div class="section-title">Day of Week Averages</div>
+                <table id="dowTable"></table>
+            </div>
+            
+            <div class="table-container">
+                <div class="section-title">ANOVA: Revenue by Day of Week</div>
+                <table id="anovaRevTable"></table>
+            </div>
+            
+            <div class="table-container">
+                <div class="section-title">ANOVA: Cost by Day of Week</div>
+                <table id="anovaCostTable"></table>
+            </div>
+            
+            <div class="table-container">
+                <div class="section-title">Summary of Findings</div>
+                <table id="summaryTable"></table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let charts = {};
+        
+        document.getElementById('csvFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('error').style.display = 'none';
+                parseCSV(file);
+            }
+        });
+        
+        function parseCSV(file) {
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    try {
+                        processData(results.data);
+                    } catch (error) {
+                        showError('Error processing data: ' + error.message);
+                    }
+                },
+                error: function(error) {
+                    showError('Error parsing CSV: ' + error.message);
+                }
+            });
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            document.getElementById('results').classList.remove('show');
+        }
+        
+        function parseDate(dateStr) {
+            // Handle DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD formats
+            const parts = dateStr.split(/[-\/]/);
+            if (parts.length === 3) {
+                // Check if first part is likely day (>12) or year (>31)
+                if (parseInt(parts[0]) > 31) {
+                    // YYYY-MM-DD
+                    return new Date(parts[0], parts[1] - 1, parts[2]);
+                } else if (parseInt(parts[0]) > 12 || parseInt(parts[1]) > 12) {
+                    // DD-MM-YYYY (day first)
+                    return new Date(parts[2], parts[1] - 1, parts[0]);
+                } else {
+                    // Ambiguous, try DD-MM-YYYY first
+                    return new Date(parts[2], parts[1] - 1, parts[0]);
+                }
+            }
+            return new Date(dateStr);
+        }
+        
+        function processData(data) {
+            // Clean and parse data
+            let df = data.filter(row => row.Date && row.Cost != null && row.Revenue != null)
+                         .map(row => ({
+                             Date: parseDate(row.Date),
+                             Cost: parseFloat(row.Cost),
+                             Revenue: parseFloat(row.Revenue)
+                         }))
+                         .filter(row => !isNaN(row.Date.getTime()) && !isNaN(row.Cost) && !isNaN(row.Revenue))
+                         .sort((a, b) => a.Date - b.Date);
+            
+            if (df.length < 10) {
+                showError('Not enough valid data rows. Need at least 10 rows with valid Date, Cost, and Revenue.');
+                return;
+            }
+            
+            // 1. Lag Correlation Analysis
+            const maxLag = Math.min(30, df.length - 2);
+            const lagResults = calculateLagCorrelation(df, maxLag);
+            
+            // 2. Find best lag
+            let bestLag = 0;
+            let bestCorr = -Infinity;
+            lagResults.forEach((corr, lag) => {
+                if (corr > bestCorr) {
+                    bestCorr = corr;
+                    bestLag = lag;
+                }
+            });
+            
+            // 3. Day of Week Analysis
+            const dowData = calculateDayOfWeekAverages(df);
+            
+            // 4. ANOVA
+            const anovaRev = calculateANOVA(df, 'Revenue');
+            const anovaCost = calculateANOVA(df, 'Cost');
+            
+            // Render everything
+            renderLagChart(lagResults, bestLag);
+            renderTimeSeriesChart(df, bestLag);
+            renderDOWChart(dowData);
+            renderDOWTable(dowData);
+            renderANOVATable('anovaRevTable', anovaRev);
+            renderANOVATable('anovaCostTable', anovaCost);
+            renderSummaryTable(bestLag, bestCorr, dowData, anovaRev, anovaCost);
+            
+            document.getElementById('results').classList.add('show');
+            document.getElementById('timeSeriesTitle').textContent = 
+                `Cost vs Revenue (${bestLag}-Day Lag) Over Time`;
+        }
+        
+        function calculateLagCorrelation(df, maxLag) {
+            const costs = df.map(d => d.Cost);
+            const revenues = df.map(d => d.Revenue);
+            const results = [];
+            
+            for (let lag = 0; lag <= maxLag; lag++) {
+                const pairs = [];
+                for (let i = 0; i < costs.length - lag; i++) {
+                    pairs.push([costs[i], revenues[i + lag]]);
+                }
+                results.push(correlation(pairs.map(p => p[0]), pairs.map(p => p[1])));
+            }
+            
+            return results;
+        }
+        
+        function correlation(x, y) {
+            const n = x.length;
+            const sumX = x.reduce((a, b) => a + b, 0);
+            const sumY = y.reduce((a, b) => a + b, 0);
+            const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
+            const sumX2 = x.reduce((sum, xi) => sum + xi * xi, 0);
+            const sumY2 = y.reduce((sum, yi) => sum + yi * yi, 0);
+            
+            const num = n * sumXY - sumX * sumY;
+            const den = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+            
+            return den === 0 ? 0 : num / den;
+        }
+        
+        function calculateDayOfWeekAverages(df) {
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const weekdayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            const grouped = {};
+            
+            df.forEach(row => {
+                const day = dayNames[row.Date.getDay()];
+                if (!grouped[day]) grouped[day] = { costs: [], revenues: [] };
+                grouped[day].costs.push(row.Cost);
+                grouped[day].revenues.push(row.Revenue);
+            });
+            
+            return weekdayOrder.map(day => ({
+                day,
+                avgCost: grouped[day] ? mean(grouped[day].costs) : 0,
+                avgRevenue: grouped[day] ? mean(grouped[day].revenues) : 0,
+                count: grouped[day] ? grouped[day].costs.length : 0
+            })).filter(d => d.count > 0);
+        }
+        
+        function calculateANOVA(df, variable) {
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const groups = {};
+            
+            df.forEach(row => {
+                const day = dayNames[row.Date.getDay()];
+                if (!groups[day]) groups[day] = [];
+                groups[day].push(row[variable]);
+            });
+            
+            const allValues = df.map(d => d[variable]);
+            const grandMean = mean(allValues);
+            const n = allValues.length;
+            const k = Object.keys(groups).length;
+            
+            // Between-group sum of squares
+            let ssb = 0;
+            Object.values(groups).forEach(group => {
+                const groupMean = mean(group);
+                ssb += group.length * Math.pow(groupMean - grandMean, 2);
+            });
+            
+            // Within-group sum of squares
+            let ssw = 0;
+            Object.values(groups).forEach(group => {
+                const groupMean = mean(group);
+                group.forEach(val => {
+                    ssw += Math.pow(val - groupMean, 2);
+                });
+            });
+            
+            const dfb = k - 1;
+            const dfw = n - k;
+            const msb = ssb / dfb;
+            const msw = ssw / dfw;
+            const f = msb / msw;
+            const p = 1 - fCDF(f, dfb, dfw);
+            
+            const sst = ssb + ssw;
+            const eta2 = ssb / sst;
+            
+            return { ssb, ssw, sst, dfb, dfw, msb, msw, f, p, eta2 };
+        }
+        
+        function mean(arr) {
+            return arr.reduce((a, b) => a + b, 0) / arr.length;
+        }
+        
+        function fCDF(x, d1, d2) {
+            // Approximate F-distribution CDF using incomplete beta function
+            if (x <= 0) return 0;
+            const betaArg = d2 / (d2 + d1 * x);
+            return 1 - incompleteBeta(d2/2, d1/2, betaArg);
+        }
+        
+        function incompleteBeta(a, b, x) {
+            // Simplified approximation for p-value calculation
+            if (x <= 0) return 0;
+            if (x >= 1) return 1;
+            // Use series approximation
+            let sum = 0;
+            let term = Math.pow(x, a) * Math.pow(1-x, b) / a;
+            for (let i = 0; i < 100; i++) {
+                sum += term;
+                term *= (a + b + i) / (a + i + 1) * x;
+                if (Math.abs(term) < 1e-10) break;
+            }
+            return sum;
+        }
+        
+        function renderLagChart(lagResults, bestLag) {
+            if (charts.lag) charts.lag.destroy();
+            
+            const ctx = document.getElementById('lagChart').getContext('2d');
+            charts.lag = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: lagResults.map((_, i) => i),
+                    datasets: [{
+                        label: 'Correlation',
+                        data: lagResults,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: lagResults.map((_, i) => i === bestLag ? '#e74c3c' : '#667eea')
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: true },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => `Lag ${context.parsed.x}: ${context.parsed.y.toFixed(3)}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { title: { display: true, text: 'Lag in Days (Revenue after X days)', font: { weight: 'bold' } } },
+                        y: { title: { display: true, text: 'Correlation', font: { weight: 'bold' } } }
+                    }
+                }
+            });
+        }
+        
+        function renderTimeSeriesChart(df, bestLag) {
+            if (charts.timeSeries) charts.timeSeries.destroy();
+            
+            const ctx = document.getElementById('timeSeriesChart').getContext('2d');
+            charts.timeSeries = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: df.map(d => d.Date.toLocaleDateString()),
+                    datasets: [{
+                        label: 'Cost (Today)',
+                        data: df.map(d => d.Cost),
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 2,
+                        yAxisID: 'y'
+                    }, {
+                        label: `Revenue (${bestLag}-Day Later)`,
+                        data: df.map((d, i) => i + bestLag < df.length ? df[i + bestLag].Revenue : null),
+                        borderColor: '#e67e22',
+                        backgroundColor: 'rgba(230, 126, 34, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 2,
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { title: { display: true, text: 'Date', font: { weight: 'bold' } } },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: { display: true, text: 'Cost', font: { weight: 'bold' }, color: '#3498db' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: { display: true, text: 'Revenue', font: { weight: 'bold' }, color: '#e67e22' },
+                            grid: { drawOnChartArea: false }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function renderDOWChart(dowData) {
+            if (charts.dow) charts.dow.destroy();
+            
+            const ctx = document.getElementById('dowChart').getContext('2d');
+            charts.dow = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dowData.map(d => d.day),
+                    datasets: [{
+                        label: 'Average Cost',
+                        data: dowData.map(d => d.avgCost),
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 5
+                    }, {
+                        label: 'Average Revenue',
+                        data: dowData.map(d => d.avgRevenue),
+                        borderColor: '#e67e22',
+                        backgroundColor: 'rgba(230, 126, 34, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: { legend: { display: true } },
+                    scales: {
+                        x: { title: { display: true, text: 'Day of Week', font: { weight: 'bold' } } },
+                        y: { title: { display: true, text: 'Average Value', font: { weight: 'bold' } } }
+                    }
+                }
+            });
+        }
+        
+        function renderDOWTable(dowData) {
+            let html = '<thead><tr><th>Day of Week</th><th>Average Cost</th><th>Average Revenue</th></tr></thead><tbody>';
+            dowData.forEach(d => {
+                html += `<tr><td>${d.day}</td><td>$${d.avgCost.toFixed(2)}</td><td>$${d.avgRevenue.toFixed(2)}</td></tr>`;
+            });
+            html += '</tbody>';
+            document.getElementById('dowTable').innerHTML = html;
+        }
+        
+        function renderANOVATable(tableId, anova) {
+            let html = '<thead><tr><th>Source</th><th>Sum of Squares</th><th>DF</th><th>Mean Square</th><th>F-statistic</th><th>p-value</th></tr></thead><tbody>';
+            html += `<tr><td>Between Groups</td><td>${anova.ssb.toFixed(2)}</td><td>${anova.dfb}</td><td>${anova.msb.toFixed(2)}</td><td class="stat-value">${anova.f.toFixed(3)}</td><td class="stat-value">${anova.p < 0.001 ? '<0.001' : anova.p.toFixed(3)}</td></tr>`;
+            html += `<tr><td>Within Groups</td><td>${anova.ssw.toFixed(2)}</td><td>${anova.dfw}</td><td>${anova.msw.toFixed(2)}</td><td>-</td><td>-</td></tr>`;
+            html += `<tr><td><strong>Total</strong></td><td>${anova.sst.toFixed(2)}</td><td>${anova.dfb + anova.dfw}</td><td>-</td><td>-</td><td>-</td></tr>`;
+            html += `<tr><td colspan="6"><strong>Effect Size (η²): ${anova.eta2.toFixed(3)}</strong></td></tr>`;
+            html += '</tbody>';
+            document.getElementById(tableId).innerHTML = html;
+        }
+        
+        function renderSummaryTable(bestLag, bestCorr, dowData, anovaRev, anovaCost) {
+            const topRevDays = [...dowData].sort((a, b) => b.avgRevenue - a.avgRevenue).slice(0, 2).map(d => d.day).join(', ');
+            const bottomRevDays = [...dowData].sort((a, b) => a.avgRevenue - b.avgRevenue).slice(0, 2).map(d => d.day).join(', ');
+            
+            const summary = [
+                ['Best lag (Cost → Revenue)', `${bestLag} days`],
+                ['Correlation at best lag', bestCorr.toFixed(3)],
+                ['Revenue weekday effect (ANOVA p)', anovaRev.p < 0.001 ? '<0.001' : anovaRev.p.toFixed(3)],
+                ['Revenue weekday effect (η²)', anovaRev.eta2.toFixed(3)],
+                ['Top revenue weekdays', topRevDays],
+                ['Bottom revenue weekdays', bottomRevDays],
+                ['Cost weekday effect (ANOVA p)', anovaCost.p.toFixed(3)],
+                ['Cost weekday effect (η²)', anovaCost.eta2.toFixed(3)]
+            ];
+            
+            let html = '<thead><tr><th>Analysis</th><th>Result</th></tr></thead><tbody>';
+            summary.forEach(([analysis, result]) => {
+                html += `<tr><td>${analysis}</td><td class="stat-value">${result}</td></tr>`;
+            });
+            html += '</tbody>';
+            document.getElementById('summaryTable').innerHTML = html;
+        }
+    </script>
+</body>
+</html>
